@@ -1,5 +1,7 @@
 FROM node:20-slim
-RUN npx -y mongodb-mcp-server@latest
+WORKDIR /app
+RUN npm install -g @mongodb-js/mongodb-mcp-server
 ENV MDB_MCP_CONNECTION_STRING=""
 ENV MDB_MCP_READ_ONLY="false"
-CMD ["npx", "mongodb-mcp-server@latest", "--transport", "sse"]
+EXPOSE 8080
+CMD ["mongodb-mcp-server", "--transport", "http", "--httpHost", "0.0.0.0", "--httpPort", "8080"]

@@ -26,42 +26,74 @@ export interface WatchItem {
   lastCheckedAt: string | null;
 }
 
+async function request<T>(path: string, options?: RequestInit, base = BASE): Promise<T> {
+  const { signal: callerSignal, ...rest } = options ?? {};
+  const timeout = AbortSignal.timeout(120_000);
+  const signal = callerSignal
+    ? AbortSignal.any([callerSignal, timeout])
+    : timeout;
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, { ...rest, signal });
+  } catch (err) {
+    const isTimeout = err instanceof Error && err.name === "TimeoutError";
+    throw new Error(
+      isTimeout
+        ? `${path} timed out after 120s`
+        : `${path} failed: could not reach server`
+    );
+  }
+
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json() as { error?: string; detail?: string };
+      detail = body.error ?? (typeof body.detail === "string" ? body.detail : "");
+    } catch { /* body not JSON — use status only */ }
+    throw new Error(`${path} failed: ${res.status}${detail ? ` — ${detail}` : ""}`);
+  }
+
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new Error(`${path} failed: invalid JSON response`);
+  }
+}
+
 export async function readBudget(userId: string): Promise<Budget> {
-  const res = await fetch(`${BASE}/read_budget/${userId}`);
-  if (!res.ok) throw new Error(`read_budget failed: ${res.status}`);
-  return res.json();
+  return request<Budget>(`/read_budget/${userId}`);
 }
 
-export async function getWatchlist(userId: string): Promise<{ watchlist: WatchItem[] }> {
-  const res = await fetch(`${BASE}/get_watchlist/${userId}`);
-  if (!res.ok) throw new Error(`get_watchlist failed: ${res.status}`);
-  return res.json();
+export async function getWatchlist(userId: string): 
+  Promise<{ watchlist: WatchItem[] }> {
+  return request<{ watchlist: WatchItem[] }>(`/get_watchlist/${userId}`);
 }
 
-export async function addToWatchlist(userId: string, product: string, threshold: number) {
-  const res = await fetch(`${BASE}/add_to_watchlist`, {
+export async function addToWatchlist(
+  userId: string,
+  product: string,
+  threshold: number
+) {
+  return request(`/add_to_watchlist`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, product, alertThresholdPrice: threshold }),
   });
-  if (!res.ok) throw new Error(`add_to_watchlist failed: ${res.status}`);
-  return res.json();
+}
+export interface CheckWatchlistResult {
+  alerts: Array<{ message?: string; product?: string }>;
 }
 
 export async function checkWatchlist(userId: string) {
-  const res = await fetch(`${BASE}/check_watchlist/${userId}`);
-  if (!res.ok) throw new Error(`check_watchlist failed: ${res.status}`);
-  return res.json();
+  return request<CheckWatchlistResult>(`/check_watchlist/${userId}`);
 }
 
 export interface ChatMessage { role: "user" | "assistant"; content: string; }
 
 export async function sendChat(messages: ChatMessage[], userId: string) {
-  const res = await fetch("/api/chat", {
+  return request<{ reply?: string; error?: string }>("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages, userId }),
-  });
-  if (!res.ok) throw new Error(`chat failed: ${res.status}`);
-  return res.json(); // { reply } or { error }
+  }, "");
 }

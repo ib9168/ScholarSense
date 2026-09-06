@@ -1,7 +1,10 @@
-FROM node:20-slim
+FROM python:3.12-slim
 WORKDIR /app
-RUN npm install -g @mongodb-js/mongodb-mcp-server
-ENV MDB_MCP_CONNECTION_STRING=""
-ENV MDB_MCP_READ_ONLY="false"
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY main.py .
+ENV MONGODB_URI=""
+ENV SERPAPI_KEY=""
+ENV OPENROUTER_API_KEY=""
 EXPOSE 8080
-CMD ["mongodb-mcp-server", "--transport", "http", "--httpHost", "0.0.0.0", "--httpPort", "8080"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
